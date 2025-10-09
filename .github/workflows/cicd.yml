@@ -1,10 +1,10 @@
-name: CI/CD - Build, Push to Private ECR, and Deploy
+name: CI/CD - Build, Push to Private ECR, Deploy via EC2 IAM Role
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:   # manual trigger option
+  workflow_dispatch:   # Manual trigger
 
 env:
   IMAGE_NAME: mediplus
@@ -15,11 +15,11 @@ jobs:
   build-push:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configure AWS credentials
+      # 2️⃣ Configure AWS credentials on GitHub runner (needed to push to ECR)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -27,7 +27,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # 3️⃣ Login to Private ECR
+      # 3️⃣ Login to Private ECR (for push)
       - name: Login to Private ECR
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
@@ -37,7 +37,7 @@ jobs:
         run: |
           docker build -t $IMAGE_NAME:${IMAGE_TAG} .
 
-      # 5️⃣ Tag Docker image for ECR
+      # 5️⃣ Tag Docker image
       - name: Tag Docker Image
         run: |
           docker tag $IMAGE_NAME:${IMAGE_TAG} ${{ env.ECR_REGISTRY }}/$IMAGE_NAME:${IMAGE_TAG}
@@ -51,21 +51,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-push
     steps:
-      # 7️⃣ Deploy to App EC2 via SSH
+      # 7️⃣ Deploy to App EC2 via SSH using IAM Role for ECR
       - name: Deploy to App EC2
         run: |
+          # Save SSH private key from GitHub Secrets
           echo "${{ secrets.SSH_KEY }}" > mykey.pem
           chmod 600 mykey.pem
+
+          # SSH into App EC2
           ssh -o StrictHostKeyChecking=no -i mykey.pem ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            # Login to Private ECR using IAM Role attached to EC2
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }} &&
+
             # Pull latest image
             docker pull ${{ env.ECR_REGISTRY }}/$IMAGE_NAME:${IMAGE_TAG} &&
+
             # Remove old container if exists
             docker rm -f mediplus || true &&
+
             # Run new container
             docker run -d --name mediplus -p 80:80 ${{ env.ECR_REGISTRY }}/$IMAGE_NAME:${IMAGE_TAG}
           "
 
-          "
 
 
 
