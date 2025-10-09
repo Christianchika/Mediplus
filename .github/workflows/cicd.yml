@@ -1,4 +1,4 @@
-name: CI - Build and Push Docker Image to Public ECR
+name: CI - Build and Push Docker Image to Private ECR
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 env:
   IMAGE_NAME: mediplus
   IMAGE_TAG: ${{ github.run_number }}
-  ECR_REGISTRY: public.ecr.aws/l7i2q7k7
+  ECR_REGISTRY: 503640389215.dkr.ecr.us-east-1.amazonaws.com/mediplus
 
 jobs:
   build-push:
@@ -22,15 +22,15 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1   # Public ECR only supports us-east-1
+          aws-region: us-east-1   
 
-      # 🔹 Login to Public ECR
-      - name: Log in to Amazon Public ECR
+      
+      - name: Log in to Amazon Private ECR
         run: |
-          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+          aws ecr-private get-login-password --region us-east-1 | docker login --username AWS --password-stdin private.ecr.aws
 
       # 🔹 Build and Push Image
-      - name: Build and Push Docker Image to Public ECR
+      - name: Build and Push Docker Image to Private ECR
         run: |
           docker build -t $IMAGE_NAME:${IMAGE_TAG} .
           docker tag $IMAGE_NAME:${IMAGE_TAG} ${ECR_REGISTRY}/$IMAGE_NAME:${IMAGE_TAG}
