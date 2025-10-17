@@ -1,4 +1,4 @@
-name: CI/CD - Build, Push to ECR, Trigger ArgoCD Sync
+name: CI/CD - Build, Push to ECR, Trigger ArgoCD
 
 on:
   push:
