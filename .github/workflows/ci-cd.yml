@@ -30,18 +30,15 @@ jobs:
           aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
 
       - name: Build Docker Image
-        run: |
-          docker build -t $IMAGE_NAME:${IMAGE_TAG} .
+        run: docker build -t $IMAGE_NAME:${IMAGE_TAG} .
 
       - name: Tag Docker Image
-        run: |
-          docker tag $IMAGE_NAME:${IMAGE_TAG} ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
+        run: docker tag $IMAGE_NAME:${IMAGE_TAG} ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
 
       - name: Push Docker Image to ECR
-        run: |
-          docker push ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
+        run: docker push ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
 
-      - name: Update image tag in deployment using sed
+      - name: Update image tag in deployment
         run: |
           sed -i "s|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:.*|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:${IMAGE_TAG}|g" kubernetes-manifest/deployment.yaml
 
@@ -49,11 +46,12 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/Christianchika/Mediplus.git
           git add kubernetes-manifest/deployment.yaml
           git commit -m "Update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
-          git push https://x-access-token:${GH_PAT}@github.com/Christianchika/Mediplus.git HEAD:main
+          git push origin main
 
   sync-argocd:
     runs-on: ubuntu-latest
@@ -62,6 +60,7 @@ jobs:
       - name: Trigger Argo CD sync
         run: |
           echo "ArgoCD will auto-sync via GitOps on new commit"
+
 
 
 
