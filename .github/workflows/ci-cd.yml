@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: mediplus
   IMAGE_TAG: ${{ github.run_number }}
   ECR_REGISTRY: 503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus
+  REGION: eu-north-1
 
 jobs:
   build-push:
@@ -23,43 +24,56 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
+          aws-region: ${{ env.REGION }}
 
       - name: Login to ECR
         run: |
-          aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+          aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
       - name: Build Docker Image
         run: docker build -t $IMAGE_NAME:${IMAGE_TAG} .
 
       - name: Tag Docker Image
-        run: docker tag $IMAGE_NAME:${IMAGE_TAG} ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
+        run: docker tag $IMAGE_NAME:${IMAGE_TAG} $ECR_REGISTRY:${IMAGE_TAG}
 
       - name: Push Docker Image to ECR
-        run: docker push ${{ env.ECR_REGISTRY }}:${IMAGE_TAG}
+        run: docker push $ECR_REGISTRY:${IMAGE_TAG}
 
-      - name: Update image tag in deployment
-        run: |
-          sed -i "s|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:.*|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:${IMAGE_TAG}|g" kubernetes-manifest/deployment.yaml
 
-      - name: Commit and push updated deployment
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/Christianchika/Mediplus.git
-          git add kubernetes-manifest/deployment.yaml
-          git commit -m "Update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
-          git push origin main
-
-  sync-argocd:
+  update-deployment:
     runs-on: ubuntu-latest
     needs: build-push
     steps:
-      - name: Trigger Argo CD sync
+      - name: Clone kubernetes-manifest repo
+        env:
+          GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+          GIT_PASSWORD: ${{ secrets.GIT_PASSWORD }}
         run: |
-          echo "ArgoCD will auto-sync via GitOps on new commit"
+          git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Christianchika/kubernetes-manifest.git
+          cd kubernetes-manifest
+
+          echo "✅ Before update:"
+          cat deployment.yaml
+
+          sed -i "s|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:.*|503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus:${IMAGE_TAG}|g" deployment.yaml
+
+          echo "✅ After update:"
+          cat deployment.yaml
+
+          git config user.email "okoro.christianpeace@gmail.com"
+          git config user.name "${GIT_USERNAME}"
+          git add deployment.yaml
+          git commit -m "Update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
+          git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Christianchika/kubernetes-manifest.git HEAD:main
+
+
+  sync-argocd:
+    runs-on: ubuntu-latest
+    needs: update-deployment
+    steps:
+      - name: Trigger Argo CD sync
+        run: echo "✅ ArgoCD will auto-sync via GitOps on new commit"
+
 
 
 
