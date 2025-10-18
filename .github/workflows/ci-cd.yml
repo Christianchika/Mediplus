@@ -70,6 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-deployment
     steps:
+      - name: Configure kubeconfig
+        run: aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME
+
       - name: Install Helm
         run: |
           curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
@@ -78,7 +81,7 @@ jobs:
         run: helm repo add jetstack https://charts.jetstack.io && helm repo update
 
       - name: Install cert-manager CRDs
-        run: kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
+        run: kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.15.0/cert-manager.crds.yaml
 
       - name: Install cert-manager via Helm
         run: helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.15.0
