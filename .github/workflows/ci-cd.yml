@@ -49,6 +49,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-push
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.REGION }}
+
       - name: Clone kubernetes-manifest repo
         env:
           GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
@@ -70,6 +77,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-deployment
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.REGION }}
+
       - name: Configure kubeconfig
         run: aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME
 
@@ -109,10 +123,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: setup-cert-manager
     steps:
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          version: 'v1.30.0'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.REGION }}
 
       - name: Configure kubeconfig
         run: aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME
@@ -124,6 +140,7 @@ jobs:
         run: |
           kubectl get ingress -n ${K8S_NAMESPACE}
           kubectl describe certificate mediplus-tls -n ${K8S_NAMESPACE}
+
 
 
 
