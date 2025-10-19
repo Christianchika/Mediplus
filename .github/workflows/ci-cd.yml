@@ -60,7 +60,7 @@ jobs:
           cd kubernetes-manifest
 
           # Update Docker image tag in mediplus-full.yaml
-          sed -i "s|\(503640389215\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:\)[^[:space:]]*|\1${IMAGE_TAG}|g" mediplus-full.yaml
+          sed -i "s|\(338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:\)[^[:space:]]*|\1${IMAGE_TAG}|g" mediplus-full.yaml
 
           git config user.email "${CERT_EMAIL}"
           git config user.name "${GIT_USERNAME}"
