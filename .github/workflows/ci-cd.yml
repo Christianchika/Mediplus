@@ -59,8 +59,8 @@ jobs:
           git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Christianchika/kubernetes-manifest.git
           cd kubernetes-manifest
 
-          # Update Docker image tag in mediplus-full.yaml
-          sed -i "s|\(338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:\)[^[:space:]]*|\1${IMAGE_TAG}|g" mediplus-full.yaml
+          # Update Docker image tag in deployment.yaml
+          sed -i "s+338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:.*+338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:${{ github.run_number }}+g" deployment.yaml
 
           git config user.email "${CERT_EMAIL}"
           git config user.name "${GIT_USERNAME}"
