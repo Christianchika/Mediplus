@@ -9,7 +9,7 @@ on:
 env:
   IMAGE_NAME: mediplus
   IMAGE_TAG: ${{ github.run_number }}
-  ECR_REGISTRY: 338970088142.dkr.ecr.eu-north-1.amazonaws.com/mediplus
+  ECR_REGISTRY: 503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus
   REGION: eu-north-1
   GITOPS_REPO: https://github.com/Christianchika/kubernetes-manifest.git
   CERT_EMAIL: okoro.christianpeace@gmail.com
@@ -60,7 +60,7 @@ jobs:
           cd kubernetes-manifest
 
           # Update Docker image tag in deployment.yaml
-          sed -i "s+338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:.*+338970088142\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:${{ github.run_number }}+g" deployment.yaml
+          sed -i "s+503640389215\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:.*+503640389215\.dkr\.ecr\.eu-north-1\.amazonaws\.com/mediplus:${{ github.run_number }}+g" deployment.yaml
 
           git config user.email "${CERT_EMAIL}"
           git config user.name "${GIT_USERNAME}"
