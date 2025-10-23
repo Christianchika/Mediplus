@@ -1,4 +1,4 @@
-name: Deploy Mediplus to K3s on AWS
+name: Deploy Mediplus to K3s on AWS with terraform
 
 on:
   push:
@@ -85,24 +85,23 @@ jobs:
       - name: Apply ClusterIssuer
         shell: bash
         run: |
-          cat <<'EOF' > clusterissuer.yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: okoro.christianpeace@gmail.com
-    privateKeySecretRef:
-      name: letsencrypt-prod
-    solvers:
-      - http01:
-          ingress:
-            class: traefik
-        
+          cat > clusterissuer.yaml <<'EOF'
+          apiVersion: cert-manager.io/v1
+          kind: ClusterIssuer
+          metadata:
+            name: letsencrypt-prod
+          spec:
+            acme:
+              server: https://acme-v02.api.letsencrypt.org/directory
+              email: okoro.christianpeace@gmail.com
+              privateKeySecretRef:
+                name: letsencrypt-prod
+              solvers:
+                - http01:
+                    ingress:
+                      class: traefik
         EOF:
-         kubectl apply -f clusterissuer.yaml --kubeconfig=k3s.yaml
+          kubectl apply -f clusterissuer.yaml --kubeconfig=k3s.yaml
 
       # Deploy Mediplus manifests
       - name: Deploy Mediplus manifests
@@ -117,7 +116,7 @@ spec:
         run: |
           kubectl get nodes --kubeconfig=k3s.yaml
           kubectl get pods -A --kubeconfig=k3s.yaml
-          kubectl get ingress --kubeconfig=k3s.yaml    
+          kubectl get ingress --kubeconfig=k3s.yaml
 
 
 
