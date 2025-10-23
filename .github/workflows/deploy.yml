@@ -1,0 +1,163 @@
+name: Deploy Mediplus to AWS via K3s + ArgoCD + Traefik
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOMAIN_NAME: mypodsix.online
+  EMAIL: okoro.christianpeace@gmail.com
+  AWS_REGION: eu-north-1
+  K8S_REPO: https://github.com/Christianchika/kubernetes-manifest.git
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - uses: actions/checkout@v4
+
+      # Terraform setup
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      # AWS credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Terraform apply
+      - run: |
+          cd infra
+          terraform init
+          terraform apply -auto-approve
+
+      # Get K3s public IP
+      - id: getip
+        run: echo "IP=$(terraform output -raw instance_ip)" >> $GITHUB_ENV
+
+      # Wait for node ready
+      - run: sleep 60
+
+      # Install kubectl
+      - run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+      # Configure SSH
+      - run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa
+          chmod 600 id_rsa
+
+      # Install K3s + Traefik
+      - run: |
+          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${{ env.IP }} \
+          "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--write-kubeconfig-mode 644 --tls-san ${DOMAIN_NAME} --disable=servicelb --disable=metrics-server' sh -"
+
+      # Copy kubeconfig
+      - run: |
+          scp -o StrictHostKeyChecking=no -i id_rsa ubuntu@${{ env.IP }}:/etc/rancher/k3s/k3s.yaml ./k3s.yaml
+          sed -i "s/127.0.0.1/${{ env.IP }}/g" k3s.yaml
+          export KUBECONFIG=$PWD/k3s.yaml
+
+      # Install Cert-Manager
+      - run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml --kubeconfig=k3s.yaml
+          sleep 60
+          cat <<EOF | kubectl apply -f - --kubeconfig=k3s.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${{ env.EMAIL }}
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: traefik
+EOF
+
+      # Install ArgoCD
+      - run: |
+          kubectl create namespace argocd || true
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --kubeconfig=k3s.yaml
+          sleep 60
+
+      # Clone Kubernetes manifest repo
+     - run: 
+          git clone ${{ env.K8S_REPO }} manifests
+
+      # Replace placeholders
+      - run: |
+          cd kubernetes-manifests
+          sed -i "s/DOMAIN_PLACEHOLDER/${{ env.DOMAIN_NAME }}/g" deployment.yaml
+          sed -i "s/EMAIL_PLACEHOLDER/${{ env.EMAIL }}/g" deployment.yaml
+
+      # Deploy to K3s
+      - run: kubectl apply -f kubernetes-manifests/deployment.yaml --kubeconfig=../k3s.yaml
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# name: Build and Push to ECR
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   build-push:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v2
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+
+#       - name: Login to Amazon ECR
+#         run: |
+#           aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 892004491300.dkr.ecr.eu-north-1.amazonaws.com
+
+#       - name: Build, tag, and push image to Amazon ECR
+#         run: |
+#           docker build -t mediplus:v1 .
+#           docker tag mediplus:v1 892004491300.dkr.ecr.eu-north-1.amazonaws.com/mediplus:v1
+#           docker push 892004491300.dkr.ecr.eu-north-1.amazonaws.com/mediplus:v1
+
