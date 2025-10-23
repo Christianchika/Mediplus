@@ -81,7 +81,7 @@ jobs:
             sleep 10
           done
 
-      # Apply ClusterIssuer
+         # Apply ClusterIssuer
       - name: Apply ClusterIssuer
         shell: bash
         run: |
@@ -100,9 +100,8 @@ spec:
       - http01:
           ingress:
             class: traefik
-              
-              EOF
-              kubectl apply -f clusterissuer.yaml --kubeconfig=k3s.yaml
+             EOF
+             kubectl apply -f clusterissuer.yaml --kubeconfig=k3s.yaml
 
       # Deploy Mediplus manifests
       - name: Deploy Mediplus manifests
@@ -118,6 +117,7 @@ spec:
           kubectl get nodes --kubeconfig=k3s.yaml
           kubectl get pods -A --kubeconfig=k3s.yaml
           kubectl get ingress --kubeconfig=k3s.yaml
+
 
 
 
