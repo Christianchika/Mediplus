@@ -1,4 +1,4 @@
-name: Deploy Mediplus
+name: Deploy Mediplus to K3s on AWS
 
 on:
   push:
