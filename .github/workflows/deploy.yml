@@ -1,4 +1,4 @@
-name: Deploy Mediplus application to K3s on AWS with Terraform
+name: Deploy Mediplus to K3s on AWS
 
 on:
   push:
@@ -16,15 +16,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout code
       - uses: actions/checkout@v4
 
-      # Setup Terraform
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      # Configure AWS credentials
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -38,16 +35,17 @@ jobs:
           terraform init
           terraform apply -auto-approve
 
-      # Get Elastic IP from Terraform outputs
+      # Get Elastic IP
       - id: getip
-        run: echo "IP=$(terraform output -raw elastic_ip)" >> $GITHUB_ENV
+        run: |
+          cd infra
+          echo "IP=$(terraform output -raw elastic_ip)" >> $GITHUB_ENV
 
       # Install kubectl
       - name: Install kubectl
         run: |
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
       # Configure SSH
       - name: Configure SSH
@@ -58,14 +56,14 @@ jobs:
       # Install K3s + Traefik
       - name: Install K3s
         run: |
-          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@$IP \
-          "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--write-kubeconfig-mode 644 --tls-san $DOMAIN_NAME --disable=servicelb --disable=metrics-server' sh -"
+          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${{ env.IP }} \
+          "curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--write-kubeconfig-mode 644 --tls-san ${{ env.DOMAIN_NAME }} --disable=servicelb --disable=metrics-server' sh -"
 
       # Copy kubeconfig
-      - name: Copy Kubeconfig
+      - name: Copy kubeconfig
         run: |
-          scp -o StrictHostKeyChecking=no -i id_rsa ubuntu@$IP:/etc/rancher/k3s/k3s.yaml ./k3s.yaml
-          sed -i "s/127.0.0.1/$IP/g" k3s.yaml
+          scp -o StrictHostKeyChecking=no -i id_rsa ubuntu@${{ env.IP }}:/etc/rancher/k3s/k3s.yaml ./k3s.yaml
+          sed -i "s/127.0.0.1/${{ env.IP }}/g" k3s.yaml
           export KUBECONFIG=$PWD/k3s.yaml
 
       # Install Cert-Manager
@@ -77,51 +75,49 @@ jobs:
       # Wait for DNS propagation
       - name: Wait for DNS propagation
         run: |
-          echo "Waiting for DNS $DOMAIN_NAME to resolve..."
+          echo "Waiting for DNS ${DOMAIN_NAME} to resolve..."
           while ! nslookup $DOMAIN_NAME >/dev/null 2>&1; do
             echo "DNS not yet propagated, sleeping 10s..."
             sleep 10
           done
 
-      # Apply ClusterIssuer for Let's Encrypt
+      # Apply ClusterIssuer
       - name: Apply ClusterIssuer
+        shell: bash
         run: |
-          echo "apiVersion: cert-manager.io/v1
+          cat <<'EOF' > clusterissuer.yaml
+apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-prod
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: $EMAIL
+    email: okoro.christianpeace@gmail.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
-    - http01:
-        ingress:
-          class: traefik" | kubectl apply -f - --kubeconfig=k3s.yaml
+      - http01:
+          ingress:
+            class: traefik
+        
+        EOF:
+         kubectl apply -f clusterissuer.yaml --kubeconfig=k3s.yaml
 
-      # Clone K8s manifests and apply
-    -name: Deploy Mediplus manifests
-    run: |
+      # Deploy Mediplus manifests
+      - name: Deploy Mediplus manifests
+        run: |
           git clone $K8S_REPO manifests
           sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN_NAME/g" manifests/deployment.yaml
           sed -i "s/EMAIL_PLACEHOLDER/$EMAIL/g" manifests/deployment.yaml
           kubectl apply -f manifests/deployment.yaml --kubeconfig=k3s.yaml
 
-      # Verify deployment
-    -name: Verify Deployment
-    run: |
+      # Verify Deployment
+      - name: Verify Deployment
+        run: |
           kubectl get nodes --kubeconfig=k3s.yaml
           kubectl get pods -A --kubeconfig=k3s.yaml
-          kubectl get ingress --kubeconfig=k3s.yaml
-
-
-
-
-
-
-
+          kubectl get ingress --kubeconfig=k3s.yaml    
 
 
 
