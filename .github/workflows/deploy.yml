@@ -37,9 +37,7 @@ jobs:
 
       # Get Elastic IP
       - id: getip
-        run: |
-          cd infra
-          echo "IP=$(terraform output -raw elastic_ip)" >> $GITHUB_ENV
+        run: echo "IP=$(terraform output -raw elastic_ip)" >> $GITHUB_ENV
 
       # Install kubectl
       - name: Install kubectl
@@ -53,7 +51,7 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa
           chmod 600 id_rsa
 
-      # Install K3s + Traefik
+      # Install K3s
       - name: Install K3s
         run: |
           ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${{ env.IP }} \
@@ -72,16 +70,7 @@ jobs:
           kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml --kubeconfig=k3s.yaml
           sleep 60
 
-      # Wait for DNS propagation
-      - name: Wait for DNS propagation
-        run: |
-          echo "Waiting for DNS ${DOMAIN_NAME} to resolve..."
-          while ! nslookup $DOMAIN_NAME >/dev/null 2>&1; do
-            echo "DNS not yet propagated, sleeping 10s..."
-            sleep 10
-          done
-
-         # Apply ClusterIssuer
+      # Apply ClusterIssuer
       - name: Apply ClusterIssuer
         shell: bash
         run: |
