@@ -1,4 +1,4 @@
-name: Deploy Mediplus application to K3s on AWS
+name: Deploy Mediplus application to K3s on AWS with Terraform
 
 on:
   push:
@@ -103,7 +103,7 @@ spec:
 
       # Clone K8s manifests and apply
     -name: Deploy Mediplus manifests
-        run: |
+    run: |
           git clone $K8S_REPO manifests
           sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN_NAME/g" manifests/deployment.yaml
           sed -i "s/EMAIL_PLACEHOLDER/$EMAIL/g" manifests/deployment.yaml
