@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: false  # Disable submodule fetching to prevent errors
+          submodules: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -34,41 +34,6 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-
-      - name: Login to AWS ECR (whitespace-safe)
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
-        run: |
-          # Strip whitespace/newlines from secrets
-          AWS_ACCESS_KEY_ID=$(echo "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')
-          AWS_SECRET_ACCESS_KEY=$(echo "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')
-          export AWS_ACCESS_KEY_ID
-          export AWS_SECRET_ACCESS_KEY
-
-          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
-          ECR_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
-
-      - name: Create ECR if not exists
-        run: |
-          REPO_NAME="mediplus-app"
-          if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1; then
-            echo "ECR repository $REPO_NAME does not exist. Creating..."
-            aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
-          else
-            echo "ECR repository $REPO_NAME already exists. Skipping creation."
-          fi
-
-      - name: Build and push Docker image
-        run: |
-          ECR_REPO_URI=$(aws ecr describe-repositories --repository-names mediplus-app --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
-          echo "ECR_REPO_URI=$ECR_REPO_URI" >> $GITHUB_ENV
-          docker build -t mediplus-app .
-          docker tag mediplus-app:latest $ECR_REPO_URI:latest
-          docker push $ECR_REPO_URI:latest
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -96,6 +61,28 @@ jobs:
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
+      - name: Login to AWS ECR
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          ECR_REPO_URL: ${{ env.ECR_REPO_URL }}
+        run: |
+          # Strip whitespace from secrets
+          AWS_ACCESS_KEY_ID=$(echo "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')
+          AWS_SECRET_ACCESS_KEY=$(echo "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')
+          export AWS_ACCESS_KEY_ID
+          export AWS_SECRET_ACCESS_KEY
+
+          echo "Logging into ECR: $ECR_REPO_URL"
+          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t mediplus-app .
+          docker tag mediplus-app:latest $ECR_REPO_URL:latest
+          docker push $ECR_REPO_URL:latest
+
       - name: Wait for infrastructure to stabilize
         run: |
           echo "Waiting 3 minutes for EC2 instances to finish booting..."
@@ -108,6 +95,7 @@ jobs:
           echo "Running deployment remotely..."
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
             "ECR_REPO_URL='${ECR_REPO_URL}' bash /home/ubuntu/deploy.sh"
+
 
 
       
