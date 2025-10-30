@@ -1,4 +1,4 @@
-name: Deploy Mediplus to AWS
+name: Deploy Mediplus to AWS with terraformS
 
 on:
   push:
