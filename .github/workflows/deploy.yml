@@ -43,8 +43,14 @@ jobs:
 
       - name: Create ECR if not exists
         run: |
-          aws ecr describe-repositories --repository-names mediplus-app --region $AWS_REGION >/dev/null 2>&1 || \
-          aws ecr create-repository --repository-name mediplus-app --region $AWS_REGION
+          REPO_NAME="mediplus-app"
+          aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "ECR repository $REPO_NAME does not exist. Creating..."
+            aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
+          else
+            echo "ECR repository $REPO_NAME already exists. Skipping creation."
+          fi
 
       - name: Build and push Docker image
         run: |
