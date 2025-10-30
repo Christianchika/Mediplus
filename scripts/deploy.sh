@@ -17,7 +17,11 @@ echo "==== Login to ECR ===="
 aws ecr get-login-password --region $REGION | sudo docker login --username AWS --password-stdin $ECR_REPO_URL
 
 echo "==== Pull latest Docker image ===="
-sudo docker pull $ECR_REPO_URL:latest
+for i in {1..3}; do
+  sudo docker pull $ECR_REPO_URL:latest && break
+  echo "Retrying docker pull..."
+  sleep 5
+done
 
 echo "==== Run Mediplus container ===="
 sudo docker stop $APP_NAME || true
@@ -44,6 +48,8 @@ sudo nginx -t && sudo systemctl reload nginx
 echo "==== Issue Let's Encrypt SSL certificate ===="
 sudo certbot --nginx -d $DOMAIN -m okoro.christianpeace@gmail.com --agree-tos --non-interactive
 sudo systemctl restart nginx
+sudo systemctl enable certbot.timer
 
 echo "==== Deployment complete ===="
 echo "App available at: https://$DOMAIN"
+

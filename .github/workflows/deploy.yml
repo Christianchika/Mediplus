@@ -1,4 +1,4 @@
-name: Deploy Mediplus to AWS with terraformS
+name: Deploy Infrastructure to AWS using Terraform
 
 on:
   push:
@@ -6,29 +6,22 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  AWS_REGION: eu-north-1
-  APP_NAME: mediplus
-  ECR_REPO_NAME: mediplus-app
-  DOMAIN: mypodsix.online
-  TF_DIR: terraform
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: eu-north-1
+      DOMAIN: mypodsix.online
+      APP_NAME: mediplus
+      TF_DIR: terraform
+
     steps:
-      # -------------------------------
-      # Checkout code
-      # -------------------------------
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: false  # avoids leftover submodule errors
+          submodules: false
 
-      # -------------------------------
-      # Configure AWS credentials (for Terraform & ECR push)
-      # -------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -36,65 +29,69 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # -------------------------------
-      # Setup Terraform
-      # -------------------------------
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.7.2
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Login to AWS ECR
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          ECR_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
+
+      - name: Create ECR repository if not exists
+        run: |
+          REPO_NAME="mediplus-app"
+          if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1; then
+            echo "ECR repository $REPO_NAME does not exist. Creating..."
+            aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
+          else
+            echo "ECR repository $REPO_NAME already exists. Skipping creation."
+          fi
+
+      - name: Build and push Docker image
+        run: |
+          ECR_REPO_URI=$(aws ecr describe-repositories --repository-names mediplus-app --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
+          echo "ECR_REPO_URI=$ECR_REPO_URI" >> $GITHUB_ENV
+          docker build -t mediplus-app .
+          docker tag mediplus-app:latest $ECR_REPO_URI:latest
+          docker push $ECR_REPO_URI:latest
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      # -------------------------------
-      # Terraform Init & Apply
-      # -------------------------------
-      - name: Terraform Init & Apply
+      - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
-        run: |
-          terraform init
-          terraform apply -auto-approve
+        run: terraform init
 
-      # -------------------------------
-      # Fetch Terraform Outputs
-      # -------------------------------
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve tfplan
+
       - name: Get Terraform Outputs
-        id: tfoutput
         working-directory: ${{ env.TF_DIR }}
         run: |
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      # -------------------------------
-      # Login to ECR and Push Docker Image
-      # -------------------------------
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push Docker image
+      - name: Wait for EC2 instances
         run: |
-          ECR_URL="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}"
-          echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
+          echo "Waiting 3 minutes for EC2 instances to finish booting..."
+          sleep 180
 
-          docker build -t $ECR_URL:latest .
-          docker push $ECR_URL:latest
-
-      # -------------------------------
-      # SSH to Reverse Proxy and Deploy
-      # -------------------------------
-      - name: Prepare SSH key
+      - name: Deploy app to reverse proxy
         run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > id_rsa
-          chmod 600 id_rsa
-
-      - name: Deploy on Reverse Proxy
-        env:
-          ECR_REPO_URL: ${{ env.ECR_REPO_URL }}
-          DOMAIN: ${{ env.DOMAIN }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-        run: |
-          scp -o StrictHostKeyChecking=no -i id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
-          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${PROXY_IP} \
+          scp -o StrictHostKeyChecking=no scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
+          ssh -o StrictHostKeyChecking=no ubuntu@${PROXY_IP} \
             "ECR_REPO_URL='${ECR_REPO_URL}' AWS_DEFAULT_REGION='${AWS_REGION}' DOMAIN='${DOMAIN}' bash /home/ubuntu/deploy.sh"
 
 
