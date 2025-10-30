@@ -35,6 +35,9 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
+      # -----------------------------
+      # Terraform Setup & Deployment
+      # -----------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -61,28 +64,32 @@ jobs:
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
+      # -----------------------------
+      # Verify AWS & ECR Login
+      # -----------------------------
+      - name: Check AWS Identity
+        run: aws sts get-caller-identity
+
       - name: Login to AWS ECR
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
           ECR_REPO_URL: ${{ env.ECR_REPO_URL }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
         run: |
-          # Strip whitespace from secrets
-          AWS_ACCESS_KEY_ID=$(echo "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')
-          AWS_SECRET_ACCESS_KEY=$(echo "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')
-          export AWS_ACCESS_KEY_ID
-          export AWS_SECRET_ACCESS_KEY
-
-          echo "Logging into ECR: $ECR_REPO_URL"
+          echo "==== Login to ECR ===="
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
 
+      # -----------------------------
+      # Build and Push Docker Image
+      # -----------------------------
       - name: Build and push Docker image
         run: |
           docker build -t mediplus-app .
           docker tag mediplus-app:latest $ECR_REPO_URL:latest
           docker push $ECR_REPO_URL:latest
 
+      # -----------------------------
+      # Deploy to Reverse Proxy
+      # -----------------------------
       - name: Wait for infrastructure to stabilize
         run: |
           echo "Waiting 3 minutes for EC2 instances to finish booting..."
@@ -95,6 +102,7 @@ jobs:
           echo "Running deployment remotely..."
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
             "ECR_REPO_URL='${ECR_REPO_URL}' bash /home/ubuntu/deploy.sh"
+
 
 
 
