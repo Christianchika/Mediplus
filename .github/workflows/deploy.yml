@@ -41,6 +41,17 @@ jobs:
           echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
           aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
 
+      - name: Create ECR if not exists
+        run: |
+          REPO_NAME="mediplus-app"
+          aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "ECR repository $REPO_NAME does not exist. Creating..."
+            aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
+          else
+            echo "ECR repository $REPO_NAME already exists. Skipping creation."
+          fi
+
       - name: Build and push Docker image
         run: |
           ECR_REPO_URI=$(aws ecr describe-repositories --repository-names mediplus-app --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)

@@ -6,6 +6,6 @@ output "reverse_proxy_public_ip" {
   value = aws_instance.reverse_proxy.public_ip
 }
 
-output "ecr_repo_url" {
-  value = aws_ecr_repository.mediplus-app.repository_url
-}
+#output "ecr_repo_url" {
+  #value = aws_ecr_repository.mediplus-app.repository_url
+#}
