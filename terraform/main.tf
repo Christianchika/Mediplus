@@ -176,7 +176,7 @@ resource "aws_ecr_repository" "mediplus_app" {
     scan_on_push = true
   }
 
-  tags = { Name = "mediplus_app" }
+  tags = { Name = "mediplus-app" }
 }
 
 
