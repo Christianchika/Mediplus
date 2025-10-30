@@ -83,7 +83,7 @@ jobs:
         run: |
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
-          echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
+          #echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
       - name: Wait for infrastructure to stabilize
         run: |
@@ -96,7 +96,8 @@ jobs:
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/
           echo "Running deployment remotely..."
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
-            "export ECR_REPO_URL=${ECR_REPO_URL} && bash /home/ubuntu/deploy.sh"
+            "ECR_REPO_URL='${ECR_REPO_URL}' bash /home/ubuntu/deploy.sh"
+
 
       
      
