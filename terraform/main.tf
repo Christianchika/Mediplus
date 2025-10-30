@@ -5,12 +5,21 @@ terraform {
       version = "~> 5.0"
     }
   }
-
   required_version = ">= 1.6.0"
 }
 
 provider "aws" {
   region = var.aws_region
+}
+
+# -------------------------------
+# Random suffix for uniqueness
+# -------------------------------
+resource "random_string" "suffix" {
+  length  = 4
+  upper   = false
+  number  = true
+  special = false
 }
 
 # -------------------------------
@@ -103,7 +112,7 @@ data "aws_ami" "ubuntu" {
 # IAM Role + Instance Profile (for ECR access)
 # -------------------------------
 resource "aws_iam_role" "ec2_role" {
-  name = "mediplus-ec2-role"
+  name = "mediplus-ec2-role-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -125,7 +134,7 @@ resource "aws_iam_role_policy_attachment" "ecr_access" {
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "mediplus-ec2-profile"
+  name = "mediplus-ec2-profile-${random_string.suffix.result}"
   role = aws_iam_role.ec2_role.name
 }
 
@@ -159,7 +168,7 @@ resource "aws_instance" "reverse_proxy" {
 # -------------------------------
 # ECR Repository
 # -------------------------------
-resource "aws_ecr_repository" "mediplus-app" {
+resource "aws_ecr_repository" "mediplus_app" {
   name                 = "mediplus-app"
   image_tag_mutability = "MUTABLE"
 
