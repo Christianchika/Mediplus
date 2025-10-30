@@ -94,7 +94,7 @@ jobs:
         run: |
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
-          #echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
+          echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
       - name: Wait for infrastructure to stabilize
         run: |
