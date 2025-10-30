@@ -100,6 +100,36 @@ data "aws_ami" "ubuntu" {
 }
 
 # -------------------------------
+# IAM Role + Instance Profile (for ECR access)
+# -------------------------------
+resource "aws_iam_role" "ec2_role" {
+  name = "mediplus-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_access" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "mediplus-ec2-profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# -------------------------------
 # EC2 Instances
 # -------------------------------
 resource "aws_instance" "web_server" {
@@ -109,6 +139,7 @@ resource "aws_instance" "web_server" {
   vpc_security_group_ids      = [aws_security_group.web_sg.id]
   key_name                    = var.key_name
   associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
 
   tags = { Name = "mediplus-webserver" }
 }
@@ -120,6 +151,7 @@ resource "aws_instance" "reverse_proxy" {
   vpc_security_group_ids      = [aws_security_group.web_sg.id]
   key_name                    = var.key_name
   associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
 
   tags = { Name = "mediplus-reverse-proxy" }
 }
@@ -128,7 +160,7 @@ resource "aws_instance" "reverse_proxy" {
 # ECR Repository
 # -------------------------------
 resource "aws_ecr_repository" "mediplus-app" {
-  name = "mediplus-app"
+  name                 = "mediplus-app"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {

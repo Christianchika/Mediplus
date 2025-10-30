@@ -1,4 +1,4 @@
-name: Deploy Infrastructure to AWS using Terraform
+name: Deploy Mediplus to AWS
 
 on:
   push:
@@ -6,22 +6,29 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  AWS_REGION: eu-north-1
+  APP_NAME: mediplus
+  ECR_REPO_NAME: mediplus-app
+  DOMAIN: mypodsix.online
+  TF_DIR: terraform
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      AWS_REGION: eu-north-1
-      DOMAIN: mypodsix.online
-      EMAIL: okoro.christianpeace@gmail.com
-      TF_DIR: terraform
-
     steps:
-      - name: Checkout code
+      # -------------------------------
+      # Checkout code
+      # -------------------------------
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: false
+          submodules: false  # avoids leftover submodule errors
 
+      # -------------------------------
+      # Configure AWS credentials (for Terraform & ECR push)
+      # -------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -29,33 +36,26 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Add SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-      # -----------------------------
-      # Terraform Setup & Deployment
-      # -----------------------------
+      # -------------------------------
+      # Setup Terraform
+      # -------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      - name: Terraform Init
+      # -------------------------------
+      # Terraform Init & Apply
+      # -------------------------------
+      - name: Terraform Init & Apply
         working-directory: ${{ env.TF_DIR }}
-        run: terraform init
+        run: |
+          terraform init
+          terraform apply -auto-approve
 
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -out=tfplan
-
-      - name: Terraform Apply
-        id: apply
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -auto-approve tfplan
-
+      # -------------------------------
+      # Fetch Terraform Outputs
+      # -------------------------------
       - name: Get Terraform Outputs
         id: tfoutput
         working-directory: ${{ env.TF_DIR }}
@@ -64,46 +64,38 @@ jobs:
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      # -----------------------------
-      # Verify AWS & ECR Login
-      # -----------------------------
-      - name: Check AWS Identity
-        run: aws sts get-caller-identity
+      # -------------------------------
+      # Login to ECR and Push Docker Image
+      # -------------------------------
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Login to AWS ECR
+      - name: Build, tag, and push Docker image
+        run: |
+          ECR_URL="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}"
+          echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
+
+          docker build -t $ECR_URL:latest .
+          docker push $ECR_URL:latest
+
+      # -------------------------------
+      # SSH to Reverse Proxy and Deploy
+      # -------------------------------
+      - name: Prepare SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > id_rsa
+          chmod 600 id_rsa
+
+      - name: Deploy on Reverse Proxy
         env:
           ECR_REPO_URL: ${{ env.ECR_REPO_URL }}
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          DOMAIN: ${{ env.DOMAIN }}
+          AWS_REGION: ${{ env.AWS_REGION }}
         run: |
-          echo "==== Login to ECR ===="
-          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
-
-      # -----------------------------
-      # Build and Push Docker Image
-      # -----------------------------
-      - name: Build and push Docker image
-        run: |
-          docker build -t mediplus-app .
-          docker tag mediplus-app:latest $ECR_REPO_URL:latest
-          docker push $ECR_REPO_URL:latest
-
-      # -----------------------------
-      # Deploy to Reverse Proxy
-      # -----------------------------
-      - name: Wait for infrastructure to stabilize
-        run: |
-          echo "Waiting 3 minutes for EC2 instances to finish booting..."
-          sleep 180
-
-      - name: Run deploy script on reverse proxy
-        run: |
-          echo "Copying deploy.sh to reverse proxy..."
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/
-          echo "Running deployment remotely..."
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
-            "ECR_REPO_URL='${ECR_REPO_URL}' bash /home/ubuntu/deploy.sh"
-
-
+          scp -o StrictHostKeyChecking=no -i id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
+          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${PROXY_IP} \
+            "ECR_REPO_URL='${ECR_REPO_URL}' AWS_DEFAULT_REGION='${AWS_REGION}' DOMAIN='${DOMAIN}' bash /home/ubuntu/deploy.sh"
 
 
       
