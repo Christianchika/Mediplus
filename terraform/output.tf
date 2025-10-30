@@ -7,5 +7,5 @@ output "reverse_proxy_public_ip" {
 }
 
 output "ecr_repo_url" {
-  value = aws_ecr_repository.app_repo.repository_url
+  value = aws_ecr_repository.mediplus-app.repository_url
 }
