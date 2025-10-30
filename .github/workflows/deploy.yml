@@ -44,8 +44,7 @@ jobs:
       - name: Create ECR if not exists
         run: |
           REPO_NAME="mediplus-app"
-          aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1
-          if [ $? -ne 0 ]; then
+          if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1; then
             echo "ECR repository $REPO_NAME does not exist. Creating..."
             aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
           else
