@@ -168,7 +168,7 @@ resource "aws_instance" "reverse_proxy" {
 # -------------------------------
 # ECR Repository
 # -------------------------------
-resource "aws_ecr_repository" "mediplus-app" {
+resource "aws_ecr_repository" "mediplus_app" {
   name                 = "mediplus_app"
   image_tag_mutability = "MUTABLE"
 
