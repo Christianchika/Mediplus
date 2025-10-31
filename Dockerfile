@@ -1,15 +1,19 @@
-# get a base image for docker hub
-FROM nginx:latest
+# Use Node.js base image
+FROM node:20-alpine
 
-RUN rm -rf /usr/share/nginx/html/*
+# Set working directory
+WORKDIR /app
 
-# define working directory
-WORKDIR /usr/share/nginx/html
+# Copy package files and install dependencies
+COPY package*.json ./
+RUN npm install --production
 
-#copy from host to container
-COPY . /usr/share/nginx/html
+# Copy app source code
+COPY . .
 
-# Expose port 
-EXPOSE 80
+# Expose the port your Node app uses
+EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+# Command to run your app
+CMD ["npm", "start"]
+
