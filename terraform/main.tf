@@ -12,22 +12,20 @@ provider "aws" {
   region = var.aws_region
 }
 
-# -------------------------------
 # Random suffix for uniqueness
-# -------------------------------
 resource "random_string" "suffix" {
   length  = 4
   upper   = false
-  numeric  = true
+  numeric = true
   special = false
 }
 
-# -------------------------------
+# -----------------------------
 # Networking
-# -------------------------------
+# -----------------------------
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
-  tags = { Name = "mediplus-vpc" }
+  tags       = { Name = "mediplus-vpc" }
 }
 
 resource "aws_subnet" "public" {
@@ -35,12 +33,12 @@ resource "aws_subnet" "public" {
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "eu-north-1a"
-  tags = { Name = "mediplus-public" }
+  tags                    = { Name = "mediplus-public" }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  tags = { Name = "mediplus-igw" }
+  tags   = { Name = "mediplus-igw" }
 }
 
 resource "aws_route_table" "public_rt" {
@@ -57,9 +55,9 @@ resource "aws_route_table_association" "assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-# -------------------------------
+# -----------------------------
 # Security Group
-# -------------------------------
+# -----------------------------
 resource "aws_security_group" "web_sg" {
   name        = "mediplus-sg"
   vpc_id      = aws_vpc.main.id
@@ -96,9 +94,9 @@ resource "aws_security_group" "web_sg" {
   tags = { Name = "mediplus-sg" }
 }
 
-# -------------------------------
+# -----------------------------
 # AMI
-# -------------------------------
+# -----------------------------
 data "aws_ami" "ubuntu" {
   most_recent = true
   filter {
@@ -108,23 +106,19 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
-# -------------------------------
-# IAM Role + Instance Profile (for ECR access)
-# -------------------------------
+# -----------------------------
+# IAM Role + Instance Profile (for ECR)
+# -----------------------------
 resource "aws_iam_role" "ec2_role" {
   name = "mediplus-ec2-role-${random_string.suffix.result}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      }
-    ]
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
   })
 }
 
@@ -138,9 +132,9 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-# -------------------------------
-# EC2 Instances
-# -------------------------------
+# -----------------------------
+# Webserver EC2
+# -----------------------------
 resource "aws_instance" "web_server" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
@@ -153,21 +147,9 @@ resource "aws_instance" "web_server" {
   tags = { Name = "mediplus-webserver" }
 }
 
-resource "aws_instance" "reverse_proxy" {
-  ami                         = data.aws_ami.ubuntu.id
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public.id
-  vpc_security_group_ids      = [aws_security_group.web_sg.id]
-  key_name                    = var.key_name
-  associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
-
-  tags = { Name = "mediplus-reverse-proxy" }
-}
-
-# -------------------------------
+# -----------------------------
 # ECR Repository
-# -------------------------------
+# -----------------------------
 resource "aws_ecr_repository" "mediplus-app" {
   name                 = "mediplus-app"
   image_tag_mutability = "MUTABLE"

@@ -1,20 +1,16 @@
 variable "aws_region" {
-  default = "eu-north-1"
+  description = "AWS Region to deploy to"
+  type        = string
+  default     = "eu-north-1"
 }
 
 variable "instance_type" {
-  default = "t3.micro"
+  description = "EC2 instance type"
+  type        = string
+  default     = "t3.medium"
 }
 
 variable "key_name" {
-  default = "stagging-key"
-  description = "Existing AWS EC2 key pair name"
-}
-
-variable "domain_name" {
-  default = "mypodsix.online"
-}
-
-variable "email" {
-  default = "okoro.christianpeace@gmail.com"
+  description = "Name of the SSH key pair"
+  type        = string
 }

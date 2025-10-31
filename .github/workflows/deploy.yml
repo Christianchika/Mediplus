@@ -1,4 +1,4 @@
-name: Deploy Infrastructure to AWS using Terraform
+name: Deploy MediPlus
 
 on:
   push:
@@ -17,11 +17,9 @@ jobs:
       TF_DIR: terraform
 
     steps:
-      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -29,77 +27,53 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3️⃣ Setup SSH key
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      # 4️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      # 5️⃣ Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
 
-      # 6️⃣ Terraform Plan
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -out=tfplan
-
-      # 7️⃣ Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
 
-      # 8️⃣ Get Terraform Outputs
       - name: Get Terraform Outputs
         id: tf_outputs
         working-directory: ${{ env.TF_DIR }}
         run: |
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
-          echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      # 9️⃣ Add Proxy Host Key
-      - name: Add Proxy Host Key
+      - name: Wait for EC2 instance to initialize
         run: |
-          ssh-keyscan -H ${PROXY_IP} >> ~/.ssh/known_hosts || true
+          echo "Waiting 90 seconds for EC2 instance to be ready..."
+          sleep 90
 
-      # 🔟 Wait for EC2 instances
-      - name: Wait for EC2 instances
-        run: sleep 180
 
-      # 1️⃣1️⃣ Login to AWS ECR
-      - name: Login to AWS ECR
+      - name: Deploy app with Docker Compose + Nginx + SSL
         run: |
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
-
-      # 1️⃣2️⃣ Build and push Docker image
-      - name: Build and push Docker image
-        run: |
-          echo "Using ECR repo from Terraform output: $ECR_REPO_URL"
-          docker build -t mediplus-app .
-          docker tag mediplus-app:latest $ECR_REPO_URL:latest
-          docker push $ECR_REPO_URL:latest
-
-      # 1️⃣3️⃣ Deploy via Docker Compose
-      - name: Deploy app with Docker Compose
-        run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml nginx.conf ubuntu@${PROXY_IP}:/home/ubuntu/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} << 'EOF'
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml nginx.conf ubuntu@${WEB_IP}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
             set -e
             sudo apt update -y
-            sudo apt install -y docker.io docker-compose
+            sudo apt install -y docker.io docker-compose nginx certbot python3-certbot-nginx
             sudo systemctl enable docker
             sudo systemctl start docker
+            sudo mv ~/nginx.conf /etc/nginx/sites-available/default
+            sudo systemctl restart nginx
             export ECR_REPO_URL="${ECR_REPO_URL}"
             sudo docker-compose pull
             sudo docker-compose down || true
             sudo docker-compose up -d --remove-orphans
+            sudo certbot --nginx -d mypodsix.online -d www.mypodsix.online --non-interactive --agree-tos -m your-email@example.com
+            sudo systemctl reload nginx
           EOF
