@@ -29,7 +29,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3️⃣ Setup SSH key (no host scan yet)
+      # 3️⃣ Setup SSH key
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -69,14 +69,11 @@ jobs:
       # 9️⃣ Add Proxy Host Key
       - name: Add Proxy Host Key
         run: |
-          echo "Adding SSH host key for proxy IP: ${PROXY_IP}"
           ssh-keyscan -H ${PROXY_IP} >> ~/.ssh/known_hosts || true
 
-      # 🔟 Wait for EC2 instances to finish booting
+      # 🔟 Wait for EC2 instances
       - name: Wait for EC2 instances
-        run: |
-          echo "Waiting 3 minutes for EC2 instances to finish booting..."
-          sleep 180
+        run: sleep 180
 
       # 1️⃣1️⃣ Login to AWS ECR
       - name: Login to AWS ECR
@@ -91,9 +88,18 @@ jobs:
           docker tag mediplus-app:latest $ECR_REPO_URL:latest
           docker push $ECR_REPO_URL:latest
 
-      # 1️⃣3️⃣ Deploy app to reverse proxy
-      - name: Deploy app to reverse proxy
+      # 1️⃣3️⃣ Deploy via Docker Compose
+      - name: Deploy app with Docker Compose
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
-            "ECR_REPO_URL='${ECR_REPO_URL}' AWS_DEFAULT_REGION='${AWS_REGION}' DOMAIN='${DOMAIN}' bash /home/ubuntu/deploy.sh"
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml nginx.conf ubuntu@${PROXY_IP}:/home/ubuntu/
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} << 'EOF'
+            set -e
+            sudo apt update -y
+            sudo apt install -y docker.io docker-compose
+            sudo systemctl enable docker
+            sudo systemctl start docker
+            export ECR_REPO_URL="${ECR_REPO_URL}"
+            sudo docker-compose pull
+            sudo docker-compose down || true
+            sudo docker-compose up -d --remove-orphans
+EOF
