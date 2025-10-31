@@ -88,18 +88,18 @@ jobs:
       # 12 Deploy static site on EC2
       - name: Deploy to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml ubuntu@${WEB_IP}:/home/ubuntu/
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r . ubuntu@${WEB_IP}:/home/ubuntu/site/
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
-            set -e
-            sudo apt update -y
-            sudo apt install -y docker.io docker-compose nginx
-            sudo systemctl enable docker
-            sudo systemctl start docker
-            sudo systemctl enable nginx
-            sudo systemctl restart nginx
-            cd /home/ubuntu
-            # Copy static site into docker build context
-            cp -r site/* .
-            sudo docker-compose up -d --build --remove-orphans
-          EOF
+         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} "mkdir -p /home/ubuntu/site"
+         scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml ubuntu@${WEB_IP}:/home/ubuntu/
+         scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r ./site/* ubuntu@${WEB_IP}:/home/ubuntu/site/
+         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
+         set -e
+         sudo apt update -y
+         sudo apt install -y docker.io docker-compose nginx
+         sudo systemctl enable docker
+         sudo systemctl start docker
+         sudo systemctl enable nginx
+         sudo systemctl restart nginx
+         cd /home/ubuntu
+         cp -r site/* .
+         sudo docker-compose up -d --build --remove-orphans
+         EOF
