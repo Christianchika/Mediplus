@@ -4,7 +4,7 @@ set -e
 APP_NAME="mediplus"
 DOMAIN="mypodsix.online"
 REGION="eu-north-1"
-ECR_REPO_URL="${ECR_REPO_URL}"
+ECR_REPO_URL="503640389215.dkr.ecr.eu-north-1.amazonaws.com/mediplus-app"
 
 echo "==== Updating system ===="
 sudo apt update -y
@@ -45,12 +45,8 @@ EOF
 sudo ln -sf /etc/nginx/sites-available/$APP_NAME /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
-# echo "==== Issue Let's Encrypt SSL certificate ===="
-# sudo certbot --nginx -d $DOMAIN -m okoro.christianpeace@gmail.com --agree-tos --non-interactive
-# sudo systemctl restart nginx
-# sudo systemctl enable certbot.timer
-
 echo "==== Deployment complete ===="
 echo "App available at: http://$DOMAIN"
+
 
 
