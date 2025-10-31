@@ -50,12 +50,12 @@ jobs:
       # 6️⃣ Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -var="key_name=stagging-key" -out=tfplan
+        run: terraform plan 
 
       # 7️⃣ Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -var="key_name=stagging-key" -auto-approve tfplan
+        run: terraform apply -auto-approve 
 
       # 8️⃣ Get Terraform Outputs
       - name: Get Terraform Outputs
