@@ -1,4 +1,4 @@
-name: Deploy Infrastructure to AWS using Terraform
+name: Deploy Static Site to AWS
 
 on:
   push:
@@ -50,12 +50,12 @@ jobs:
       # 6️⃣ Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}
-        run: terraform plan 
+        run: terraform plan -out=tfplan
 
       # 7️⃣ Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -auto-approve 
+        run: terraform apply -auto-approve tfplan
 
       # 8️⃣ Get Terraform Outputs
       - name: Get Terraform Outputs
@@ -65,28 +65,24 @@ jobs:
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      # 9️⃣ Wait 180s for DNS & EC2 initialization
-      - name: Wait for DNS and EC2
+      # 9️⃣ Wait 180s for DNS propagation
+      - name: Wait for DNS & EC2 initialization
         run: |
           echo "Waiting 180 seconds for EC2 and DNS to stabilize..."
           sleep 180
 
-      # 🔟 Login to AWS ECR
-      - name: Login to AWS ECR
-        run: |
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
-
-      # 1️⃣1️⃣ Build and push Docker image
-      - name: Build and push Docker image
+      # 🔟 Build and push Docker image (optional if using ECR)
+      - name: Build Docker image
         run: |
           docker build -t mediplus-app .
           docker tag mediplus-app:latest $ECR_REPO_URL:latest
           docker push $ECR_REPO_URL:latest
 
-      # 1️⃣2️⃣ Deploy to EC2 with Docker + Nginx
-      - name: Deploy app and Nginx to EC2
+      # 1️⃣1️⃣ Deploy static site on EC2
+      - name: Deploy to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml nginx.conf ubuntu@${WEB_IP}:/home/ubuntu/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml ubuntu@${WEB_IP}:/home/ubuntu/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r . ubuntu@${WEB_IP}:/home/ubuntu/site/
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
             set -e
             sudo apt update -y
@@ -96,8 +92,7 @@ jobs:
             sudo systemctl enable nginx
             sudo systemctl restart nginx
             cd /home/ubuntu
-            export ECR_REPO_URL="${ECR_REPO_URL}"
-            sudo docker-compose pull
-            sudo docker-compose down || true
-            sudo docker-compose up -d --remove-orphans
+            # Copy static site into docker build context
+            cp -r site/* .
+            sudo docker-compose up -d --build --remove-orphans
           EOF

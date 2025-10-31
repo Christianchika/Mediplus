@@ -1,14 +1,17 @@
-# Use Node.js base image
-FROM node:20-alpine
+# Use a lightweight web server image
+FROM nginx:alpine
 
-WORKDIR /app
+# Remove default nginx content
+RUN rm -rf /usr/share/nginx/html/*
 
-COPY package*.json ./
-RUN npm install --omit=dev
+# Copy your static site files into nginx html directory
+COPY . /usr/share/nginx/html
 
-COPY . .
+# Expose port 80
+EXPOSE 80
 
-EXPOSE 3000
-CMD ["node", "server.js"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
+
 
 
