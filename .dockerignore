@@ -1,12 +1,6 @@
-# Ignore Git repository
-.git
-.gitignore
+# Ignore everything except the site folder
+*
+!site/
 
-# Ignore local Node modules (not needed for static site)
-node_modules
 
-# Ignore log files
-*.log
 
-# Ignore optional Docker Compose override
-docker-compose.override.yml
