@@ -71,14 +71,21 @@ jobs:
           echo "Waiting 180 seconds for EC2 and DNS to stabilize..."
           sleep 180
 
-      # 🔟 Build and push Docker image (optional if using ECR)
-      - name: Build Docker image
+       # 🔟 Login to AWS ECR
+      - name: Login to AWS ECR
         run: |
-          docker build -t mediplus-app .
-          docker tag mediplus-app:latest $ECR_REPO_URL:latest
-          docker push $ECR_REPO_URL:latest
+         echo "Logging in to ECR..."
+         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
 
-      # 1️⃣1️⃣ Deploy static site on EC2
+      # 1️⃣1️⃣ Build and push Docker image
+      - name: Build and push Docker image
+        run: |
+         docker build -t mediplus-app .
+         docker tag mediplus-app:latest $ECR_REPO_URL:latest
+         docker push $ECR_REPO_URL:latest
+
+
+      # 12 Deploy static site on EC2
       - name: Deploy to EC2
         run: |
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml ubuntu@${WEB_IP}:/home/ubuntu/
