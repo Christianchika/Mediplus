@@ -1,4 +1,4 @@
-name: Deploy Static Site to AWS
+name: Deploy Static Site to AWS with terraform
 
 on:
   push:
