@@ -90,7 +90,7 @@ jobs:
         run: |
          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} "mkdir -p /home/ubuntu/site"
          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml ubuntu@${WEB_IP}:/home/ubuntu/
-         scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r ./site/* ubuntu@${WEB_IP}:/home/ubuntu/site/
+         scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r ./* ubuntu@${WEB_IP}:/home/ubuntu/site/
          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
          set -e
          sudo apt update -y
