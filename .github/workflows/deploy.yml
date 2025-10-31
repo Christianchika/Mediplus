@@ -59,8 +59,8 @@ jobs:
 
       - name: Wait for EC2 instance to initialize
         run: |
-          echo "Waiting 90 seconds for EC2 instance to be ready..."
-          sleep 90
+          echo "Waiting 180 seconds for EC2 instance to be ready..."
+          sleep 180
 
 
       - name: Deploy app with Docker Compose + Nginx + SSL
