@@ -1,4 +1,4 @@
-name: Deploy MediPlus
+name: Deploy Infrastructure to AWS using Terraform
 
 on:
   push:
@@ -17,9 +17,11 @@ jobs:
       TF_DIR: terraform
 
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -27,29 +29,35 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # 3️⃣ Setup SSH key
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
+      # 4️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
+      # 5️⃣ Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
 
+      # 6️⃣ Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}
-        run: terraform plan
+        run: terraform plan -var="key_name=stagging-key" -out=tfplan
 
+      # 7️⃣ Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -auto-approve
+        run: terraform apply -var="key_name=stagging-key" -auto-approve tfplan
 
+      # 8️⃣ Get Terraform Outputs
       - name: Get Terraform Outputs
         id: tf_outputs
         working-directory: ${{ env.TF_DIR }}
@@ -57,27 +65,39 @@ jobs:
           echo "WEB_IP=$(terraform output -raw web_server_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      - name: Wait for EC2 instance to initialize
+      # 9️⃣ Wait 180s for DNS & EC2 initialization
+      - name: Wait for DNS and EC2
         run: |
-          echo "Waiting 180 seconds for EC2 instance to be ready..."
+          echo "Waiting 180 seconds for EC2 and DNS to stabilize..."
           sleep 180
 
+      # 🔟 Login to AWS ECR
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
 
-      - name: Deploy app with Docker Compose + Nginx + SSL
+      # 1️⃣1️⃣ Build and push Docker image
+      - name: Build and push Docker image
+        run: |
+          docker build -t mediplus-app .
+          docker tag mediplus-app:latest $ECR_REPO_URL:latest
+          docker push $ECR_REPO_URL:latest
+
+      # 1️⃣2️⃣ Deploy to EC2 with Docker + Nginx
+      - name: Deploy app and Nginx to EC2
         run: |
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa docker-compose.yml nginx.conf ubuntu@${WEB_IP}:/home/ubuntu/
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${WEB_IP} << 'EOF'
             set -e
             sudo apt update -y
-            sudo apt install -y docker.io docker-compose nginx certbot python3-certbot-nginx
+            sudo apt install -y docker.io docker-compose nginx
             sudo systemctl enable docker
             sudo systemctl start docker
-            sudo mv ~/nginx.conf /etc/nginx/sites-available/default
+            sudo systemctl enable nginx
             sudo systemctl restart nginx
+            cd /home/ubuntu
             export ECR_REPO_URL="${ECR_REPO_URL}"
             sudo docker-compose pull
             sudo docker-compose down || true
             sudo docker-compose up -d --remove-orphans
-            sudo certbot --nginx -d mypodsix.online -d www.mypodsix.online --non-interactive --agree-tos -m your-email@example.com
-            sudo systemctl reload nginx
           EOF
