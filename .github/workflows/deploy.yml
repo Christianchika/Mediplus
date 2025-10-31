@@ -17,9 +17,11 @@ jobs:
       TF_DIR: terraform
 
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -27,55 +29,35 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ✅ Setup SSH key only (no host scan yet)
+      # 3️⃣ Setup SSH key (no host scan yet)
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Login to AWS ECR
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
-          ECR_URL="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
-
-      #- name: Create ECR repository if not exists
-        #run: |
-         # REPO_NAME="mediplus-app"
-          #if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION >/dev/null 2>&1; then
-            #echo "ECR repository $REPO_NAME does not exist. Creating..."
-            #aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
-          #else
-            #echo "ECR repository $REPO_NAME already exists. Skipping creation."
-          #fi
-
-      - name: Build and push Docker image
-        run: |
-          ECR_REPO_URI=$(aws ecr describe-repositories --repository-names mediplus-app --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
-          echo "ECR_REPO_URI=$ECR_REPO_URI" >> $GITHUB_ENV
-          docker build -t mediplus-app .
-          docker tag mediplus-app:latest $ECR_REPO_URI:latest
-          docker push $ECR_REPO_URI:latest
-
+      # 4️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
+      # 5️⃣ Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_DIR }}
         run: terraform init
 
+      # 6️⃣ Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_DIR }}
         run: terraform plan -out=tfplan
 
+      # 7️⃣ Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         run: terraform apply -auto-approve tfplan
 
+      # 8️⃣ Get Terraform Outputs
       - name: Get Terraform Outputs
         id: tf_outputs
         working-directory: ${{ env.TF_DIR }}
@@ -84,17 +66,32 @@ jobs:
           echo "PROXY_IP=$(terraform output -raw reverse_proxy_public_ip)" >> $GITHUB_ENV
           echo "ECR_REPO_URL=$(terraform output -raw ecr_repo_url)" >> $GITHUB_ENV
 
-      # ✅ Now we have PROXY_IP — safely add its SSH host key
+      # 9️⃣ Add Proxy Host Key
       - name: Add Proxy Host Key
         run: |
           echo "Adding SSH host key for proxy IP: ${PROXY_IP}"
           ssh-keyscan -H ${PROXY_IP} >> ~/.ssh/known_hosts || true
 
+      # 🔟 Wait for EC2 instances to finish booting
       - name: Wait for EC2 instances
         run: |
           echo "Waiting 3 minutes for EC2 instances to finish booting..."
           sleep 180
 
+      # 1️⃣1️⃣ Login to AWS ECR
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+
+      # 1️⃣2️⃣ Build and push Docker image
+      - name: Build and push Docker image
+        run: |
+          echo "Using ECR repo from Terraform output: $ECR_REPO_URL"
+          docker build -t mediplus-app .
+          docker tag mediplus-app:latest $ECR_REPO_URL:latest
+          docker push $ECR_REPO_URL:latest
+
+      # 1️⃣3️⃣ Deploy app to reverse proxy
       - name: Deploy app to reverse proxy
         run: |
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
