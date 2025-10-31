@@ -19,8 +19,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -29,10 +27,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.8.1  # ✅ Fixed version
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      # ✅ New way to load SSH key (replaces webfactory/ssh-agent)
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${DOMAIN} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${PROXY_IP:-13.49.246.161} >> ~/.ssh/known_hosts
 
       - name: Login to AWS ECR
         run: |
@@ -90,10 +92,9 @@ jobs:
 
       - name: Deploy app to reverse proxy
         run: |
-          scp -o StrictHostKeyChecking=no -i id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
-          ssh -o StrictHostKeyChecking=no -i id_rsa ubuntu@${PROXY_IP} \
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa scripts/deploy.sh ubuntu@${PROXY_IP}:/home/ubuntu/deploy.sh
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
             "ECR_REPO_URL='${ECR_REPO_URL}' AWS_DEFAULT_REGION='${AWS_REGION}' DOMAIN='${DOMAIN}' bash /home/ubuntu/deploy.sh"
-
 
       
      
