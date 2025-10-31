@@ -1,5 +1,5 @@
  # Nginx is installed on the host directly, no container needed
-version: "3.9"
+version: "3.3"
 
 services:
   web:
@@ -8,5 +8,6 @@ services:
     ports:
       - "80:80"
     restart: always
+
 
 
