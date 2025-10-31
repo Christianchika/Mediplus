@@ -27,13 +27,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ✅ New way to load SSH key (replaces webfactory/ssh-agent)
+      # ✅ Simplified SSH setup
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${DOMAIN} >> ~/.ssh/known_hosts
+          # Only add proxy IP (domain might not resolve yet)
           ssh-keyscan -H ${PROXY_IP:-13.49.246.161} >> ~/.ssh/known_hosts
 
       - name: Login to AWS ECR
@@ -96,5 +96,3 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${PROXY_IP} \
             "ECR_REPO_URL='${ECR_REPO_URL}' AWS_DEFAULT_REGION='${AWS_REGION}' DOMAIN='${DOMAIN}' bash /home/ubuntu/deploy.sh"
 
-      
-     
